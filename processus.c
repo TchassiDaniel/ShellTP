@@ -60,8 +60,8 @@ void getPile(PileProcess *pile)
     {
         if(proc->etat == EN_COURS_EXECUTION)
             printf("%d \t\tEN COURS D'EXECUTION\n",proc->pid);
-        else
-            printf("%d \t\tEN COURS D'EXECUTION\n",proc->pid);
+        else if(proc->etat == ARRETE)
+            printf("%d \t\tARRETE\n",proc->pid);
         proc = proc->precedent;
     }
     
@@ -90,18 +90,18 @@ void killProcess(PileProcess *pile, int pid, Etat etat)
 
     if(etat == EN_COURS_EXECUTION)
     {
-        if((success = kill(pid, SIGCONT))==0)
-            (getProcess(pile, pid))->etat = EN_COURS_EXECUTION;
+        (getProcess(pile, pid))->etat = EN_COURS_EXECUTION;
+        success = kill(pid, SIGCONT);
     }
     else if(etat == ARRETE)
     {
-        if((success = kill(pid, SIGSTOP)) == 0)
-            (getProcess(pile, pid))->etat = ARRETE;
+        (getProcess(pile, pid))->etat = ARRETE;
+        success = kill(pid, SIGSTOP);
     }
     else if(etat == TERMINE)
     {
-        if((success = kill(pid, SIGTERM)) == 0)
-            removeProcess(pile, pid);
+        removeProcess(pile, pid);
+        success = kill(pid, SIGTERM);
     }
 
     if(success != 0)

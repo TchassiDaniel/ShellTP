@@ -9,6 +9,14 @@
 #include <stdio.h>
 #include <stdlib.h>
 
+//Une structure de pile pour gerer les variables d'environnement
+typedef struct Environ{
+    char *nomVariable;
+    char *valeur;
+
+    struct Environ * prev;
+} Environ;
+
 char *jumpSpace(char *msg);
 
 int echo(char *str);
@@ -18,6 +26,10 @@ int cat(char *str);
 int ps(char *str, PileProcess *pile);
 
 void quit(PileProcess *pile);
+
+Environ *export(Environ *varEnv, char *str);
+
+void env(Environ *varEnv);
 
 /*
     Cette fonction prend en paramètre un tableau de 2 chaine de caratère, le premier argument est le 

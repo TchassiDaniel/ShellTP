@@ -2,9 +2,9 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
-#include  <sys/types.h>
+#include <sys/types.h>
 #include <wait.h>
-#include  <unistd.h>
+#include <unistd.h>
 #include <signal.h>
 #include "commande.c"
 #include "processus.h"
@@ -21,34 +21,43 @@ bool inParent = false;
 
 PileProcess pile;//Cette variable contiendra tout les processus en cours d'execution ouarreté
 PileProcess pileStop;//Cette pile va contenir les processus qui ont été arreté dans l'odre
+Environ *varEnv;//Cette liste contiendra les variables d'environnement
 
 void monSignchild(int signal)
 {
 
-    int status = -7;
-    int pid = wait(&status);
+    int status;
+    int pid;
     //Si le pid est -1 On ne fait rien
-    if(pid == -1);
-    //On regarde si le programme s'est ARRETE
+    while((pid = waitpid(-1, &status, WNOHANG|WUNTRACED|WCONTINUED))>0)
+    {
+            //On regarde si le programme c'est terminé correctement
+        if(WIFEXITED(status))
+            removeProcess(&pile, pid);
+        //Il s"est terminé à cause d'un signal recu
+        else if(WIFSIGNALED(status))
+            removeProcess(&pile, pid);
+        //on l'a  arrété
+        else if(WIFSTOPPED(status)){
+            (getProcess(&pile, pid))->etat = ARRETE;
+            killProcess(&pile, pid, ARRETE);
+        }
+        else if(WIFCONTINUED(status)){
+            removeProcess(&pileStop, pid);
+            (getProcess(&pile,pid))->etat = EN_COURS_EXECUTION;
+            killProcess(&pile, pid, EN_COURS_EXECUTION);
+        }
+            
 
-    else if(WIFSTOPPED(status))
-        (getProcess(&pile, pid))->etat = ARRETE;
-    //On regarde si le programme a été relancé
-    else if(WIFCONTINUED(status))
-        (getProcess(&pile, pid))->etat = EN_COURS_EXECUTION;
-    //On regarde si le programme cet arreté
-    else if(WIFEXITED(status))
-        removeProcess(&pile, pid);
-    else if(WIFSIGNALED(status))
-		removeProcess(&pile, pid);
-        
+    }
+
 }
 //Cette fonction définit le comportement du signal SIGINT(envoyé par CTRL-C)
 void monSignInt(int signal){
     if(inParent == true){
         int pid = (pile.process)->pid;
         killProcess(&pile, pid, TERMINE);
-    }    
+    }
 }
 //Cette fonction définit le comportement du signal SIGSTP(envoyé par CTRL-Z)
 void monSignStp(int signal){
@@ -61,13 +70,16 @@ void monSignStp(int signal){
 
 int main()
 {
+    //On initialise nos listes declarés plus haut
     createPileProcess(&pile);
     createPileProcess(&pileStop);
+    varEnv = NULL;
 
     //On definit la fonction qui gerera ce qui arrivze a l'enfant
-    signal(SIGCHLD, &monSignchild);
-    signal(SIGTSTP, &monSignStp);
-    signal(SIGINT, &monSignInt);
+    signal(SIGCHLD, monSignchild);
+    signal(SIGTSTP, monSignStp);
+    signal(SIGINT, monSignInt);
+
     do{
         char *entree = malloc(MAX * sizeof(char));//Cette variable va contenir la ligne validée par l'utilisateur
         char commande[MAX];//Cette chaine extraire le premier mot extrait de l'entree supposé etre la commande a executer
@@ -78,7 +90,7 @@ int main()
 
         //On regarde si le processus sera traité en parallèle
         int paralell = 0;
-        
+
         printf("daniel@ubuntu$ ");
         fgets(entree, MAX, stdin);
         *strchr(entree, '\n') = '\0';
@@ -105,6 +117,12 @@ int main()
             strcpy(msg, entree+i+1);
             cat(msg);
         }
+        else if(strcmp(commande, "export") == 0){
+            varEnv = export(varEnv, entree+i+1);
+        }
+        else if(strcmp(commande, "env") == 0){
+            env(varEnv);
+        }
         else if(strcmp(commande, "ps") == 0)
         {
             ps(NULL, &pile);
@@ -129,9 +147,17 @@ int main()
 
             signalKill(&pile, arg);
         }
+        else if(strcmp(commande, "bg") == 0){
+            if(pileStop.process != NULL){
+                int pid = (pileStop.process)->pid;
+                removeProcess(&pileStop, pid);
+                (getProcess(&pile,pid))->etat = EN_COURS_EXECUTION;
+                killProcess(&pile, pid, EN_COURS_EXECUTION);
+            }
+        }
         else//S'il ne s'agit pas de commande interne
         {
-            
+
             if(entree[strlen(entree)-1] == '&')
             {
                 paralell = 1;
@@ -173,24 +199,22 @@ int main()
                 else
                 {
                     addProcess(&pile, EN_COURS_EXECUTION, pid_child, false);
-                    
+
                 }
                 //Si on est pas en parallèle on attend
                 if(paralell == 0)
                 {
                     inParent = true;//On signale que le parent attend
-            
-                    resultWait = wait(&status);
-
-                    if(WIFSTOPPED(status)){
-                        addProcess(&pileStop, ARRETE, pid_child, true);
-                        (getProcess(&pile, pid_child))->etat = ARRETE;
+                    
+                    waitpid(pid_child, &status, WUNTRACED);
+                    
+                    if(WIFEXITED(status)){
+                        removeProcess(&pile, pid_child);
                     }
-
-                    inParent =false;//Le pareent reprend la main
+                    inParent =false;//Le parent reprend la main
                 }
             }
-            
+
         }
 
     }while(1);
@@ -202,7 +226,7 @@ int recupererCommande(char *commande, char* entree)
 {
     int i = 0, j = 0;//variable avec laquelle on parcourera les tableaux
     int boolean = 1;
-    
+
     while(boolean && entree[i] != '\0')
         {
             //Si l'utilisateur a mis des espaces avant sa commande on les traverse d'abord

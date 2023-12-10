@@ -69,4 +69,23 @@ void signalKill(PileProcess *pile, char *arg[2])
     }
 }
 
+Environ* export(Environ *varEnv, char *str){
+    Environ *newVar = malloc(sizeof(Environ));
+
+    newVar->nomVariable = strsep(&str, "=");
+    newVar->valeur = str;
+    newVar->prev = varEnv;
+
+    return newVar;
+}
+
+void env(Environ *varEnv){
+   Environ *prec = varEnv;
+   printf("Les variables d'environnement sont:\n");
+    while(prec != NULL){
+        printf("%s=%s\n", prec->nomVariable,prec->valeur);
+        prec = prec->prev;
+    }
+}
+
 //lmbench
